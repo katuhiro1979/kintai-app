@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>出勤簿</title>
+<meta name="description" content="個人用の出勤簿(勤怠記録アプリ)" />
+<meta name="theme-color" content="#2c4d66" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="出勤簿" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="root"><div class="kintai-root kintai-loading">読み込み中…</div></div>
+<div id="offline-badge" class="k-offline-badge" style="position:fixed;top:8px;right:8px;z-index:60;">オフライン</div>
+
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="cloud-config.js"></script>
+<script src="cloud.js"></script>
+<script src="app.js"></script>
+<script>
+  // オフライン中はバッジを出す(データはlocalStorageに保存されるので、オフラインでも入力・保存は続けられる)
+  const badge = document.getElementById("offline-badge");
+  const syncBadge = () => { badge.style.display = navigator.onLine ? "none" : "inline-block"; };
+  window.addEventListener("online", syncBadge);
+  window.addEventListener("offline", syncBadge);
+  syncBadge();
+</script>
+</body>
+</html>
