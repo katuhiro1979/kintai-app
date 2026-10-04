@@ -318,7 +318,7 @@ tr.k-leave-row td { background: #f2e6e2; }
 
   /* 入力枠を指で押しやすい高さにする */
   .k-note-select, .k-remark-input, .k-table input[type="time"], .k-table input[type="date"] {
-    min-height: 38px; box-sizing: border-box; font-size: 14px; padding: 6px 8px;
+    min-height: 30px; box-sizing: border-box; font-size: 14px; padding: 3px 8px;
   }
   .k-table input[type="time"], .k-table input[type="date"] { width: 92px; }
   .k-ot-time { width: 92px !important; }
