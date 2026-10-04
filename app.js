@@ -876,10 +876,11 @@ function KintaiApp() {
 
   // カレンダー(月の見出し)まで戻る
   const backToCalendar = () => {
-    const el = document.getElementById("k-calendar-top");
-    if (el) el.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
+    // 見出しは画面上部に固定されるため、固定されない親(k-ledger)の位置へ移動する
+    const el = document.getElementById("k-ledger");
+    if (el) window.scrollTo({
+      top: el.getBoundingClientRect().top + window.scrollY,
+      behavior: "smooth"
     });
   };
 
@@ -1468,10 +1469,10 @@ function KintaiApp() {
     className: "k-back-cal",
     onClick: backToCalendar
   }, "\u2191 \u30AB\u30EC\u30F3\u30C0\u30FC\u306B\u623B\u308B"), /*#__PURE__*/React.createElement("div", {
-    className: "k-ledger"
+    className: "k-ledger",
+    id: "k-ledger"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "k-ledger-head",
-    id: "k-calendar-top"
+    className: "k-ledger-head"
   }, /*#__PURE__*/React.createElement("button", {
     className: "k-nav",
     onClick: () => changeMonth(-1)
