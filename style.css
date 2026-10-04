@@ -316,6 +316,14 @@ tr.k-leave-row td { background: #f2e6e2; }
   .k-ot-result { margin-top: 0; margin-left: auto; text-align: right; }
   .k-ot-cell, .k-ot-result { font-size: 11px; }
 
+  /* 入力枠を指で押しやすい高さにする */
+  .k-note-select, .k-remark-input, .k-table input[type="time"], .k-table input[type="date"] {
+    min-height: 38px; box-sizing: border-box; font-size: 14px; padding: 6px 8px;
+  }
+  .k-table input[type="time"], .k-table input[type="date"] { width: 92px; }
+  .k-ot-time { width: 92px !important; }
+  .k-table td { padding-top: 7px; padding-bottom: 7px; }
+
   .k-card { padding: 10px; }
   .k-card h3 { font-size: 13px; margin: 0 0 6px; }
   .k-stat-list > div { font-size: 11px; padding: 3px 0; }
