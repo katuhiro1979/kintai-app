@@ -1,9 +1,9 @@
-// 出勤簿のオフライン対応用 Service Worker。
+﻿// 出勤簿のオフライン対応用 Service Worker。
 // アプリ本体(HTML/CSS/JS/アイコン)をキャッシュし、電波が無い場所でも開けるようにする。
 // 入力データ自体はキャッシュではなく localStorage に保存される(このファイルの役目ではない)。
 
 // ファイルを更新したら、この番号を上げてください。上げないと、古いキャッシュが使われ続けます。
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const CACHE_NAME = `kintai-shell-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
@@ -24,7 +24,8 @@ const PRECACHE_URLS = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      // ブラウザのHTTPキャッシュ(GitHub Pagesは約10分)を通さず、常に最新のファイルを取り込む
+      .then((cache) => Promise.all(PRECACHE_URLS.map((u) => cache.add(new Request(u, { cache: "reload" })))))
       .then(() => self.skipWaiting())
   );
 });
