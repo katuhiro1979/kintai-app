@@ -860,6 +860,42 @@ function KintaiApp() {
     setBulkSel({}); // 別の月の選択が残らないようにする
     setBulkMsg("");
   };
+
+  // 今日の月へ戻り、今日の行へ移動する
+  const goToday = () => {
+    if (view.y !== today.y || view.m !== today.m) {
+      setView({
+        y: today.y,
+        m: today.m
+      });
+      setBulkSel({});
+      setBulkMsg("");
+    }
+    setTimeout(() => jumpToDate(todayKey), 100);
+  };
+
+  // カレンダー(月の見出し)まで戻る
+  const backToCalendar = () => {
+    const el = document.getElementById("k-calendar-top");
+    if (el) el.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  };
+
+  // カレンダーが画面の上に隠れたら「カレンダーに戻る」を表示する
+  const [calHidden, setCalHidden] = useState(false);
+  useEffect(() => {
+    const onScroll = () => {
+      const el = document.getElementById("k-mini-cal");
+      setCalHidden(!!el && el.getBoundingClientRect().bottom < 0);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, {
+      passive: true
+    });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   const jumpToDate = key => {
     const el = document.getElementById(`row-${key}`);
     if (!el) return;
@@ -1428,17 +1464,24 @@ function KintaiApp() {
   }, /*#__PURE__*/React.createElement("button", {
     className: "k-btn-secondary",
     onClick: reauthorizeFile
-  }, "\uD83D\uDD13 \u8A31\u53EF\u3059\u308B"))), /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDD13 \u8A31\u53EF\u3059\u308B"))), calHidden && /*#__PURE__*/React.createElement("button", {
+    className: "k-back-cal",
+    onClick: backToCalendar
+  }, "\u2191 \u30AB\u30EC\u30F3\u30C0\u30FC\u306B\u623B\u308B"), /*#__PURE__*/React.createElement("div", {
     className: "k-ledger"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "k-ledger-head"
+    className: "k-ledger-head",
+    id: "k-calendar-top"
   }, /*#__PURE__*/React.createElement("button", {
     className: "k-nav",
     onClick: () => changeMonth(-1)
   }, "\u2039"), /*#__PURE__*/React.createElement("h2", null, view.y, "\u5E74 ", monthLabel(view.m)), /*#__PURE__*/React.createElement("button", {
     className: "k-nav",
     onClick: () => changeMonth(1)
-  }, "\u203A")), limitAlerts.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "\u203A"), /*#__PURE__*/React.createElement("button", {
+    className: "k-today-btn",
+    onClick: goToday
+  }, "\u4ECA\u65E5")), limitAlerts.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "k-limit-alerts"
   }, limitAlerts.map(c => {
     const level = limitLevelOf(c.mins, c.limitHours);
@@ -1500,7 +1543,8 @@ function KintaiApp() {
   }, "\uD83D\uDCCB ", prevMonth, "\u6708\u306E\u30D1\u30BF\u30FC\u30F3\u3092\u30B3\u30D4\u30FC")), bulkMsg && /*#__PURE__*/React.createElement("div", {
     className: "k-bulk-msg"
   }, bulkMsg)), /*#__PURE__*/React.createElement("div", {
-    className: "k-mini-cal"
+    className: "k-mini-cal",
+    id: "k-mini-cal"
   }, /*#__PURE__*/React.createElement("div", {
     className: "k-mini-cal-weekdays"
   }, ["日", "月", "火", "水", "木", "金", "土"].map(wd => /*#__PURE__*/React.createElement("div", {

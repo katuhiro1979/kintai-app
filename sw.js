@@ -3,7 +3,7 @@
 // 入力データ自体はキャッシュではなく localStorage に保存される(このファイルの役目ではない)。
 
 // ファイルを更新したら、この番号を上げてください。上げないと、古いキャッシュが使われ続けます。
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const CACHE_NAME = `kintai-shell-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
