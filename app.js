@@ -246,6 +246,15 @@ const shiftDateKey = (key, delta) => {
   const dt = new Date(y, m - 1, d + delta);
   return dateKey(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
 };
+
+// 「動きを減らす」設定の端末ではスムーズスクロールを使わない
+const scrollMode = () => {
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  } catch (e) {
+    return "smooth";
+  }
+};
 const limitLevelOf = (mins, limitHours) => {
   const ratio = mins / (limitHours * 60);
   return ratio > 1 ? "over" : ratio >= LIMIT_WARN_RATIO ? "warn" : "ok";
@@ -381,7 +390,8 @@ function KintaiApp() {
   // 起動時に今日の行が見える位置までスクロールする
   useEffect(() => {
     if (!loaded) return;
-    const el = document.getElementById(`row-${todayKey}`);
+    const els = [`row-${todayKey}`, `drow-${todayKey}`].map(id => document.getElementById(id));
+    const el = els.find(e => e && e.getClientRects().length);
     if (!el) return;
     const wrap = el.closest(".k-table-wrap");
     if (wrap && wrap.scrollHeight > wrap.clientHeight) {
@@ -883,7 +893,7 @@ function KintaiApp() {
     const stuck = head && getComputedStyle(head).position === "sticky" ? head.offsetHeight : 0;
     window.scrollTo({
       top: el.getBoundingClientRect().top + window.scrollY - stuck,
-      behavior: "smooth"
+      behavior: scrollMode()
     });
   };
 
@@ -900,11 +910,62 @@ function KintaiApp() {
     });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // 「…」メニュー(JSON保存・インポート・クラウド)と、スマホ用の日別入力シート
+  const [showMenu, setShowMenu] = useState(false);
+  const [editKey, setEditKey] = useState(null); // 入力シートで開いている日(dateKey)
+  const [toastMsg, setToastMsg] = useState("");
+  const toastTimerRef = useRef(null);
+  const showToast = msg => {
+    setToastMsg(msg);
+    clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMsg(""), 2600);
+  };
+  const sheetRef = useRef(null);
+  const lastFocusRef = useRef(null);
+  const anyDialog = showMenu || !!editKey || showLeave || showMemo || showSettings;
+  useEffect(() => {
+    if (!anyDialog) return;
+    const onKey = e => {
+      if (e.key !== "Escape") return;
+      if (editKey) setEditKey(null);else if (showLeave) setShowLeave(false);else if (showMemo) setShowMemo(false);else if (showSettings) {
+        setShowSettings(false);
+        setConfirmReset(false);
+      } else setShowMenu(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [anyDialog, editKey, showLeave, showMemo, showSettings, showMenu]);
+  // 入力シートを開いたらシートへフォーカスを移し、閉じたら元のボタンへ戻す
+  useEffect(() => {
+    if (!editKey) return;
+    lastFocusRef.current = document.activeElement;
+    if (sheetRef.current) sheetRef.current.focus();
+    return () => {
+      const el = lastFocusRef.current;
+      if (el && el.focus && document.contains(el)) el.focus();
+    };
+  }, [editKey]);
+  // シートを開いている間は、後ろの画面をスクロールさせない
+  useEffect(() => {
+    document.documentElement.classList.toggle("k-noscroll", !!editKey);
+    return () => document.documentElement.classList.remove("k-noscroll");
+  }, [editKey]);
+
+  // 表(PC)と一覧(スマホ)のうち、いま表示されている方の行を返す
+  const findRow = key => {
+    const ids = [`row-${key}`, `drow-${key}`];
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el && el.getClientRects().length) return el;
+    }
+    return null;
+  };
   const jumpToDate = key => {
-    const el = document.getElementById(`row-${key}`);
+    const el = findRow(key);
     if (!el) return;
     el.scrollIntoView({
-      behavior: "smooth",
+      behavior: scrollMode(),
       block: "center"
     });
     el.classList.add("k-row-flash");
@@ -946,6 +1007,7 @@ function KintaiApp() {
     updateRecord(key, {
       locked: !current.locked
     });
+    showToast(current.locked ? "ロックを解除しました" : "この日をロックしました");
   };
   const addLeave = () => {
     if (!leavePickDate) return;
@@ -976,6 +1038,7 @@ function KintaiApp() {
     updateRecord(todayKey, {
       [field]: now
     });
+    showToast(`${label}を ${now} で記録しました`);
     // 別の月を表示中なら今月へ戻し、入力結果が見えるように今日の行へ移動する
     if (view.y !== today.y || view.m !== today.m) setView({
       y: today.y,
@@ -1134,6 +1197,7 @@ function KintaiApp() {
         await writable.close();
         lastFileDataRef.current = data;
         setFileSavedAt(hmNow());
+        showToast("JSONファイルに保存しました");
         return;
       }
     } catch (err) {
@@ -1141,6 +1205,7 @@ function KintaiApp() {
       fileHandleRef.current = null;
     }
     downloadJsonFile(data, `kintai-data-${todayKey}.json`);
+    showToast("JSONファイルをダウンロードしました");
   };
 
   // JSONの内容を画面の状態へ反映する(インポート・バックアップ復元で共通)
@@ -1325,6 +1390,27 @@ function KintaiApp() {
   const todayRec = records[todayKey] || {};
   const saveLabel = loadError ? "自動保存: 停止中" : saveState === "saving" ? "保存中…" : saveState === "error" ? "⚠ 保存に失敗しました" : saveState === "saved" ? `✓ 保存しました ${savedAt}` : "";
   const saveStatusText = saveLabel + (fileSavedAt && !loadError ? `／ ファイル ${fileSavedAt}` : "");
+
+  // 1日分の表示用の計算(表・一覧・入力シートで共通)
+  const calcDay = rec => {
+    const hasBasis = !!(rec.clockIn && rec.clockOut || rec.otStart && rec.otEnd);
+    let otMinutes = 0;
+    let workText = "―";
+    if (!rec.isLeave && hasBasis) {
+      otMinutes = overtimeMinutesFor(rec);
+      workText = minutesToLabel(standardHoursFor(rec) * 60 + otMinutes);
+    }
+    return {
+      hasBasis,
+      otMinutes,
+      workText
+    };
+  };
+  // 「12h30m」のような短い時間表記(集計タイルと一覧用)
+  const shortHm = mins => `${Math.floor(mins / 60)}h${pad(Math.round(mins % 60))}m`;
+  const monthOtLevel = limitLevelOf(monthOvertime, LIMIT_MONTH_OT_HOURS);
+  const sheetRec = editKey ? records[editKey] || {} : null;
+  const sheetDay = editKey ? Number(editKey.slice(8, 10)) : 0;
   return /*#__PURE__*/React.createElement("div", {
     ref: rootRef,
     className: "kintai-root",
@@ -1362,37 +1448,71 @@ function KintaiApp() {
   }, /*#__PURE__*/React.createElement("span", {
     className: "k-eyebrow"
   }, "\u500B\u4EBA\u52E4\u6020\u8A18\u9332"), /*#__PURE__*/React.createElement("h1", null, "\u51FA\u52E4\u7C3F")), /*#__PURE__*/React.createElement("div", {
-    className: "k-header-right"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "k-header-btn-row"
+    className: "k-menu-wrap"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "k-menu-btn",
+    onClick: () => setShowMenu(v => !v),
+    "aria-haspopup": "menu",
+    "aria-expanded": showMenu,
+    "aria-label": "\u30E1\u30CB\u30E5\u30FC"
+  }, /*#__PURE__*/React.createElement("span", {
+    "aria-hidden": "true"
+  }, "\u22EF")), showMenu && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "k-menu-backdrop",
+    onClick: () => setShowMenu(false)
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "k-menu",
+    role: "menu"
   }, cloudOn && /*#__PURE__*/React.createElement("button", {
-    className: "k-header-export",
-    onClick: () => setShowCloud(v => !v)
-  }, "\u2601 ", cloudUser ? "同期" : "ログイン"), /*#__PURE__*/React.createElement("button", {
-    className: "k-header-export",
-    onClick: handleExport
+    role: "menuitem",
+    onClick: () => {
+      setShowCloud(v => !v);
+      setShowMenu(false);
+    }
+  }, "\u2601 ", cloudUser ? "クラウド同期" : "ログイン"), /*#__PURE__*/React.createElement("button", {
+    role: "menuitem",
+    onClick: () => {
+      setShowMenu(false);
+      handleExport();
+    }
   }, "\u2B07 JSON\u4FDD\u5B58"), /*#__PURE__*/React.createElement("button", {
-    className: "k-header-export",
-    onClick: () => fileInputRef.current && fileInputRef.current.click()
-  }, "\u2B06 \u30C7\u30FC\u30BF\u3092\u30A4\u30F3\u30DD\u30FC\u30C8")), /*#__PURE__*/React.createElement("div", {
+    role: "menuitem",
+    onClick: () => {
+      setShowMenu(false);
+      fileInputRef.current && fileInputRef.current.click();
+    }
+  }, "\u2B06 \u30C7\u30FC\u30BF\u3092\u30A4\u30F3\u30DD\u30FC\u30C8"))))), /*#__PURE__*/React.createElement("section", {
+    className: "k-hero",
+    "aria-label": "\u4ECA\u65E5\u306E\u6253\u523B"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "k-hero-info"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "k-date"
+  }, today.y, "\u5E74", today.m, "\u6708", today.d, "\u65E5\uFF08", weekdayLabel(today.y, today.m, today.d), "\uFF09", todayRec.note && /*#__PURE__*/React.createElement("span", {
+    className: "k-hero-note"
+  }, todayRec.note)), /*#__PURE__*/React.createElement("div", {
     className: "k-clock"
   }, clock), /*#__PURE__*/React.createElement("div", {
-    className: "k-date"
-  }, today.y, "\u5E74", today.m, "\u6708", today.d, "\u65E5\uFF08", weekdayLabel(today.y, today.m, today.d), "\uFF09"), /*#__PURE__*/React.createElement("div", {
+    className: `k-save-status ${saveState === "error" || loadError ? "k-save-status-error" : ""}`
+  }, saveStatusText, cloudOn && cloudUser && cloudStatus ? `　${cloudStatus}` : "")), /*#__PURE__*/React.createElement("div", {
     className: "k-punch-row"
   }, /*#__PURE__*/React.createElement("button", {
     className: "k-punch-btn k-punch-in",
     onClick: () => punch("clockIn"),
     title: "\u73FE\u5728\u6642\u523B\u3092\u4ECA\u65E5\u306E\u51FA\u52E4\u306B\u5165\u529B"
-  }, "\u51FA\u52E4", todayRec.clockIn ? ` ${todayRec.clockIn}` : ""), /*#__PURE__*/React.createElement("button", {
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "k-punch-label"
+  }, "\u51FA\u52E4"), /*#__PURE__*/React.createElement("span", {
+    className: "k-punch-time"
+  }, todayRec.clockIn || "未打刻")), /*#__PURE__*/React.createElement("button", {
     className: "k-punch-btn k-punch-out",
     onClick: () => punch("clockOut"),
     title: "\u73FE\u5728\u6642\u523B\u3092\u4ECA\u65E5\u306E\u9000\u52E4\u306B\u5165\u529B"
-  }, "\u9000\u52E4", todayRec.clockOut ? ` ${todayRec.clockOut}` : "")), /*#__PURE__*/React.createElement("div", {
-    className: `k-save-status ${saveState === "error" || loadError ? "k-save-status-error" : ""}`
-  }, saveStatusText), cloudOn && cloudUser && cloudStatus && /*#__PURE__*/React.createElement("div", {
-    className: "k-save-status"
-  }, cloudStatus))), cloudOn && showCloud && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "k-punch-label"
+  }, "\u9000\u52E4"), /*#__PURE__*/React.createElement("span", {
+    className: "k-punch-time"
+  }, todayRec.clockOut || "未打刻")))), cloudOn && showCloud && /*#__PURE__*/React.createElement("div", {
     className: "k-cloud-panel"
   }, cloudUser ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, "\u30ED\u30B0\u30A4\u30F3\u4E2D: ", cloudUser), /*#__PURE__*/React.createElement("div", {
     className: "k-import-banner-buttons"
@@ -1453,15 +1573,17 @@ function KintaiApp() {
     onClick: () => setLoadError(false)
   }, "\u7A7A\u3067\u958B\u59CB"))), isEmpty && !importPromptDismissed && !loadError && /*#__PURE__*/React.createElement("div", {
     className: "k-import-banner"
-  }, /*#__PURE__*/React.createElement("span", null, "\u8A18\u9332\u304C\u307E\u3060\u3042\u308A\u307E\u305B\u3093\u3002\u30D0\u30C3\u30AF\u30A2\u30C3\u30D7\u306EJSON\u30D5\u30A1\u30A4\u30EB\u304C\u3042\u308C\u3070\u30A4\u30F3\u30DD\u30FC\u30C8\u3067\u304D\u307E\u3059\u3002"), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("strong", {
+    className: "k-empty-title"
+  }, "\u8A18\u9332\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"), "\u4E0A\u306E\u300C\u51FA\u52E4\u300D\u30DC\u30BF\u30F3\u3067\u4ECA\u65E5\u306E\u6253\u523B\u304B\u3089\u59CB\u3081\u3089\u308C\u307E\u3059\u3002\u30D0\u30C3\u30AF\u30A2\u30C3\u30D7\u306EJSON\u30D5\u30A1\u30A4\u30EB\u304C\u3042\u308C\u3070\u3001\u305D\u3053\u304B\u3089\u53D6\u308A\u8FBC\u3081\u307E\u3059\u3002"), /*#__PURE__*/React.createElement("div", {
     className: "k-import-banner-buttons"
   }, /*#__PURE__*/React.createElement("button", {
     className: "k-btn-secondary",
     onClick: () => fileInputRef.current && fileInputRef.current.click()
-  }, "\u2B06 \u30A4\u30F3\u30DD\u30FC\u30C8"), /*#__PURE__*/React.createElement("button", {
+  }, "\u2B06 \u30D0\u30C3\u30AF\u30A2\u30C3\u30D7\u3092\u53D6\u308A\u8FBC\u3080"), /*#__PURE__*/React.createElement("button", {
     className: "k-btn-secondary-outline",
     onClick: () => setImportPromptDismissed(true)
-  }, "\u30B9\u30AD\u30C3\u30D7"))), needsFilePermission && /*#__PURE__*/React.createElement("div", {
+  }, "\u9589\u3058\u308B"))), needsFilePermission && /*#__PURE__*/React.createElement("div", {
     className: "k-import-banner"
   }, /*#__PURE__*/React.createElement("span", null, "\u4FDD\u5B58\u5148\u30D5\u30A1\u30A4\u30EB\u300C", savedFileName, "\u300D\u3078\u306E\u66F8\u304D\u8FBC\u307F\u8A31\u53EF\u304C\u5FC5\u8981\u3067\u3059(\u30D5\u30A1\u30A4\u30EB\u306E\u9078\u3073\u76F4\u3057\u306F\u4E0D\u8981\u3067\u3059)\u3002"), /*#__PURE__*/React.createElement("div", {
     className: "k-import-banner-buttons"
@@ -1479,14 +1601,44 @@ function KintaiApp() {
     id: "k-calendar-top"
   }, /*#__PURE__*/React.createElement("button", {
     className: "k-nav",
-    onClick: () => changeMonth(-1)
-  }, "\u2039"), /*#__PURE__*/React.createElement("h2", null, view.y, "\u5E74 ", monthLabel(view.m)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => changeMonth(-1),
+    "aria-label": "\u524D\u306E\u6708"
+  }, "\u2039"), /*#__PURE__*/React.createElement("h2", {
+    "aria-live": "polite"
+  }, view.y, "\u5E74 ", monthLabel(view.m)), /*#__PURE__*/React.createElement("button", {
     className: "k-nav",
-    onClick: () => changeMonth(1)
+    onClick: () => changeMonth(1),
+    "aria-label": "\u6B21\u306E\u6708"
   }, "\u203A"), /*#__PURE__*/React.createElement("button", {
     className: "k-today-btn",
     onClick: goToday
-  }, "\u4ECA\u65E5")), limitAlerts.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "\u4ECA\u65E5")), /*#__PURE__*/React.createElement("div", {
+    className: "k-summary"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "k-sum-tile"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "k-sum-label"
+  }, "\u52E4\u52D9\u65E5\u6570"), /*#__PURE__*/React.createElement("span", {
+    className: "k-sum-val"
+  }, monthWorkDays, /*#__PURE__*/React.createElement("small", null, "\u65E5"))), /*#__PURE__*/React.createElement("div", {
+    className: `k-sum-tile k-sum-${monthOtLevel}`
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "k-sum-label"
+  }, "\u6642\u9593\u5916"), /*#__PURE__*/React.createElement("span", {
+    className: "k-sum-val"
+  }, shortHm(monthOvertime))), /*#__PURE__*/React.createElement("div", {
+    className: "k-sum-tile"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "k-sum-label"
+  }, "\u4F11\u65E5"), /*#__PURE__*/React.createElement("span", {
+    className: "k-sum-val"
+  }, monthHolidays + monthStatutoryHolidays, /*#__PURE__*/React.createElement("small", null, "\u65E5"))), /*#__PURE__*/React.createElement("div", {
+    className: "k-sum-tile"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "k-sum-label"
+  }, "\u6709\u7D66 \u6B8B"), /*#__PURE__*/React.createElement("span", {
+    className: "k-sum-val"
+  }, leaveRemaining, /*#__PURE__*/React.createElement("small", null, "\u65E5")))), limitAlerts.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "k-limit-alerts"
   }, limitAlerts.map(c => {
     const level = limitLevelOf(c.mins, c.limitHours);
@@ -1568,17 +1720,85 @@ function KintaiApp() {
     const isToday = key === todayKey;
     const weekend = isWeekend(view.y, view.m, d);
     const cls = ["k-mini-cal-day", isToday ? "k-mini-cal-today" : "", rec?.isLeave ? "k-mini-cal-leave" : "", weekend && !isToday && !rec?.isLeave ? "k-weekend-text" : "", bulkMode && bulkSel[key] ? "k-mini-cal-selected" : ""].join(" ").trim();
+    const dayCalc = rec ? calcDay(rec) : null;
+    const hasWork = !!(rec && !rec.isLeave && rec.clockIn && rec.clockOut);
+    const hasOt = !!(dayCalc && dayCalc.otMinutes > 0);
+    const label = `${d}日（${weekdayLabel(view.y, view.m, d)}）${rec?.note ? " " + rec.note : ""}${hasWork ? " 出勤あり" : ""}${hasOt ? " 時間外あり" : ""}`;
     return /*#__PURE__*/React.createElement("button", {
       key: key,
       className: cls,
       onClick: () => bulkMode ? toggleSelect(key) : jumpToDate(key),
-      title: `${d}日${rec?.note ? " " + rec.note : ""}`
+      title: label,
+      "aria-label": label
     }, /*#__PURE__*/React.createElement("span", {
       className: "k-mini-cal-daynum"
     }, d), rec?.note && /*#__PURE__*/React.createElement("span", {
       className: "k-mini-cal-note"
-    }, rec.note));
-  }))), /*#__PURE__*/React.createElement("div", {
+    }, rec.note), /*#__PURE__*/React.createElement("span", {
+      className: "k-mini-cal-dots",
+      "aria-hidden": "true"
+    }, hasWork && /*#__PURE__*/React.createElement("span", {
+      className: "k-dot k-dot-work"
+    }), hasOt && /*#__PURE__*/React.createElement("span", {
+      className: "k-dot k-dot-ot"
+    })));
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "k-legend",
+    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("i", {
+    className: "k-dot k-dot-work"
+  }), "\u51FA\u52E4\u3042\u308A"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("i", {
+    className: "k-dot k-dot-ot"
+  }), "\u6642\u9593\u5916\u3042\u308A"))), /*#__PURE__*/React.createElement("ul", {
+    className: "k-daylist"
+  }, dayList.map(d => {
+    const key = dateKey(view.y, view.m, d);
+    const rec = records[key] || {};
+    const weekend = isWeekend(view.y, view.m, d);
+    const isToday = key === todayKey;
+    const {
+      hasBasis,
+      otMinutes,
+      workText
+    } = calcDay(rec);
+    const holiday = holidayTypes.includes(rec.note);
+    const cls = ["k-day-row", rec.isLeave ? "k-day-row-leave" : "", isToday ? "k-day-row-today" : "", bulkMode && bulkSel[key] ? "k-day-row-selected" : ""].join(" ").trim();
+    const timeText = rec.isLeave ? "有給休暇" : rec.clockIn || rec.clockOut ? `${rec.clockIn || "―"} → ${rec.clockOut || "―"}` : rec.note ? "" : "未入力";
+    return /*#__PURE__*/React.createElement("li", {
+      key: key
+    }, /*#__PURE__*/React.createElement("button", {
+      id: `drow-${key}`,
+      className: cls,
+      onClick: () => bulkMode ? toggleSelect(key) : setEditKey(key),
+      "aria-label": `${d}日（${weekdayLabel(view.y, view.m, d)}）${rec.note || ""} ${timeText} を${bulkMode ? "選択" : "編集"}`
+    }, bulkMode && /*#__PURE__*/React.createElement("span", {
+      className: `k-day-check ${bulkSel[key] ? "k-day-check-on" : ""}`,
+      "aria-hidden": "true"
+    }, bulkSel[key] ? "✓" : ""), /*#__PURE__*/React.createElement("span", {
+      className: "k-day-date"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "k-day-num"
+    }, d), /*#__PURE__*/React.createElement("span", {
+      className: `k-day-wd ${weekend ? "k-weekend-text" : ""}`
+    }, weekdayLabel(view.y, view.m, d))), /*#__PURE__*/React.createElement("span", {
+      className: "k-day-body"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "k-day-line"
+    }, rec.note && /*#__PURE__*/React.createElement("span", {
+      className: `k-chip ${holiday ? "k-chip-holiday" : rec.isLeave ? "k-chip-leave" : ""}`
+    }, rec.note), timeText && /*#__PURE__*/React.createElement("span", {
+      className: "k-day-time"
+    }, timeText)), !rec.isLeave && hasBasis && /*#__PURE__*/React.createElement("span", {
+      className: "k-day-sub"
+    }, workText, otMinutes > 0 && /*#__PURE__*/React.createElement("span", {
+      className: "k-day-ot"
+    }, "\u6642\u9593\u5916 ", shortHm(otMinutes))), rec.remark && rec.remark !== rec.note && /*#__PURE__*/React.createElement("span", {
+      className: "k-day-remark"
+    }, rec.remark)), /*#__PURE__*/React.createElement("span", {
+      className: "k-day-end",
+      "aria-hidden": "true"
+    }, rec.locked ? "🔒" : "›")));
+  })), /*#__PURE__*/React.createElement("div", {
     className: "k-table-wrap"
   }, /*#__PURE__*/React.createElement("table", {
     className: "k-table"
@@ -1599,13 +1819,11 @@ function KintaiApp() {
     const isToday = key === todayKey;
     const dayLocked = !!rec.locked;
     const rowClass = rec.isLeave ? "k-leave-row" : isToday ? "k-today" : d % 2 === 0 ? "k-stripe-b" : "k-stripe-a";
-    let otMinutes = 0;
-    let workText = "―";
-    const hasBasis = rec.clockIn && rec.clockOut || rec.otStart && rec.otEnd;
-    if (!rec.isLeave && hasBasis) {
-      otMinutes = overtimeMinutesFor(rec);
-      workText = minutesToLabel(standardHoursFor(rec) * 60 + otMinutes);
-    }
+    const {
+      hasBasis,
+      otMinutes,
+      workText
+    } = calcDay(rec);
     return /*#__PURE__*/React.createElement("tr", {
       key: key,
       id: `row-${key}`,
@@ -1626,15 +1844,17 @@ function KintaiApp() {
     }, "\uFF08", weekdayLabel(view.y, view.m, d), "\uFF09"), /*#__PURE__*/React.createElement("button", {
       className: `k-lock-btn ${dayLocked ? "k-lock-btn-locked" : ""}`,
       onClick: () => toggleDayLock(key),
-      title: "\u3053\u306E\u65E5\u3092\u30ED\u30C3\u30AF/\u89E3\u9664"
-    }, dayLocked ? "🔒 ロック中" : "🔓 編集可")), /*#__PURE__*/React.createElement("td", {
+      title: "\u3053\u306E\u65E5\u3092\u30ED\u30C3\u30AF/\u89E3\u9664",
+      "aria-pressed": dayLocked,
+      "aria-label": `${d}日をロック/解除（現在: ${dayLocked ? "ロック中" : "編集可"}）`
+    }, dayLocked ? "🔒 ロック中" : "編集可")), /*#__PURE__*/React.createElement("td", {
       className: "k-col-note",
       "data-label": "\u696D\u52D9\u5185\u5BB9"
     }, /*#__PURE__*/React.createElement("select", {
       className: "k-note-select",
       disabled: dayLocked,
       style: holidayTypes.includes(rec.note) ? {
-        color: "#a35d4e",
+        color: "var(--hanko)",
         fontWeight: 700
       } : undefined,
       value: rec.note || "",
@@ -1646,7 +1866,7 @@ function KintaiApp() {
       key: opt || "blank",
       value: opt,
       style: holidayTypes.includes(opt) ? {
-        color: "#a35d4e"
+        color: "var(--hanko)"
       } : undefined
     }, opt || "―")))), rec.isLeave ? /*#__PURE__*/React.createElement("td", {
       colSpan: 2,
@@ -1660,7 +1880,8 @@ function KintaiApp() {
       className: "k-mini-btn",
       disabled: dayLocked,
       onClick: () => toggleLeave(key, false),
-      title: "\u6709\u4F11\u3092\u53D6\u6D88"
+      title: "\u6709\u4F11\u3092\u53D6\u6D88",
+      "aria-label": `${d}日の有休を取り消す`
     }, "\u21BA"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("td", {
       "data-label": "\u51FA\u52E4"
     }, /*#__PURE__*/React.createElement("input", {
@@ -1746,7 +1967,127 @@ function KintaiApp() {
   }, "\uD83D\uDCDD \u30E1\u30E2"), /*#__PURE__*/React.createElement("button", {
     className: "k-settings-toggle",
     onClick: () => setShowSettings(true)
-  }, "\u2699 \u8A2D\u5B9A"))), suggestion && /*#__PURE__*/React.createElement("div", {
+  }, "\u2699 \u8A2D\u5B9A"))), editKey && sheetRec && (() => {
+    const sheetLocked = !!sheetRec.locked;
+    const {
+      hasBasis: sHasBasis,
+      otMinutes: sOt,
+      workText: sWork
+    } = calcDay(sheetRec);
+    const wd = weekdayLabel(view.y, view.m, sheetDay);
+    return /*#__PURE__*/React.createElement("div", {
+      className: "k-modal-overlay k-sheet-overlay",
+      onClick: () => setEditKey(null)
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "k-sheet",
+      ref: sheetRef,
+      tabIndex: -1,
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-label": `${view.m}月${sheetDay}日の入力`,
+      onClick: e => e.stopPropagation()
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "k-sheet-grab",
+      "aria-hidden": "true"
+    }), /*#__PURE__*/React.createElement("div", {
+      className: "k-sheet-head"
+    }, /*#__PURE__*/React.createElement("h3", null, view.m, "\u6708", sheetDay, "\u65E5", /*#__PURE__*/React.createElement("span", {
+      className: `k-day-wd ${isWeekend(view.y, view.m, sheetDay) ? "k-weekend-text" : ""}`
+    }, "\uFF08", wd, "\uFF09")), /*#__PURE__*/React.createElement("button", {
+      className: `k-lock-btn ${sheetLocked ? "k-lock-btn-locked" : ""}`,
+      onClick: () => toggleDayLock(editKey),
+      "aria-pressed": sheetLocked
+    }, sheetLocked ? "🔒 ロック中" : "編集可"), /*#__PURE__*/React.createElement("button", {
+      className: "k-icon-btn",
+      onClick: () => setEditKey(null),
+      "aria-label": "\u9589\u3058\u308B"
+    }, "\u2715")), /*#__PURE__*/React.createElement("div", {
+      className: "k-sheet-body"
+    }, /*#__PURE__*/React.createElement("label", {
+      className: "k-field"
+    }, "\u696D\u52D9\u5185\u5BB9", /*#__PURE__*/React.createElement("select", {
+      disabled: sheetLocked,
+      value: sheetRec.note || "",
+      onChange: e => {
+        onNoteChange(editKey, e.target.value);
+        suggestAfterNight(editKey, e.target.value);
+      }
+    }, workTypeOptions.map(opt => /*#__PURE__*/React.createElement("option", {
+      key: opt || "blank",
+      value: opt
+    }, opt || "―")))), sheetRec.isLeave ? /*#__PURE__*/React.createElement("div", {
+      className: "k-sheet-leave"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "k-leave-stamp"
+    }, "\u6709\u4F11"), /*#__PURE__*/React.createElement("button", {
+      className: "k-btn-secondary-outline",
+      disabled: sheetLocked,
+      onClick: () => toggleLeave(editKey, false)
+    }, "\u21BA \u6709\u4F11\u3092\u53D6\u308A\u6D88\u3059")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      className: "k-sheet-row"
+    }, /*#__PURE__*/React.createElement("label", {
+      className: "k-field"
+    }, "\u51FA\u52E4", /*#__PURE__*/React.createElement("input", {
+      type: "time",
+      disabled: sheetLocked,
+      value: sheetRec.clockIn || "",
+      onChange: e => updateRecord(editKey, {
+        clockIn: e.target.value
+      })
+    })), /*#__PURE__*/React.createElement("label", {
+      className: "k-field"
+    }, "\u9000\u52E4", /*#__PURE__*/React.createElement("input", {
+      type: "time",
+      disabled: sheetLocked,
+      value: sheetRec.clockOut || "",
+      onChange: e => updateRecord(editKey, {
+        clockOut: e.target.value
+      })
+    }))), /*#__PURE__*/React.createElement("div", {
+      className: "k-field"
+    }, "\u6642\u9593\u5916", /*#__PURE__*/React.createElement("div", {
+      className: "k-sheet-row k-sheet-ot"
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "time",
+      "aria-label": "\u6642\u9593\u5916\u306E\u958B\u59CB",
+      disabled: sheetLocked,
+      value: sheetRec.otStart || "",
+      onChange: e => updateRecord(editKey, {
+        otStart: e.target.value
+      })
+    }), /*#__PURE__*/React.createElement("span", null, "\u301C"), /*#__PURE__*/React.createElement("input", {
+      type: "time",
+      "aria-label": "\u6642\u9593\u5916\u306E\u7D42\u4E86",
+      disabled: sheetLocked,
+      value: sheetRec.otEnd || "",
+      onChange: e => updateRecord(editKey, {
+        otEnd: e.target.value
+      })
+    }))), /*#__PURE__*/React.createElement("div", {
+      className: "k-sheet-result"
+    }, /*#__PURE__*/React.createElement("span", null, "\u4F5C\u696D\u6642\u9593 ", /*#__PURE__*/React.createElement("strong", null, sWork)), /*#__PURE__*/React.createElement("span", null, "\u6642\u9593\u5916 ", /*#__PURE__*/React.createElement("strong", null, sHasBasis ? minutesToLabel(sOt) : "―"))), /*#__PURE__*/React.createElement("label", {
+      className: "k-field"
+    }, "\u5099\u8003", /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      disabled: sheetLocked,
+      placeholder: "\u5099\u8003",
+      value: sheetRec.remark || "",
+      onChange: e => updateRecord(editKey, {
+        remark: e.target.value
+      })
+    })))), /*#__PURE__*/React.createElement("div", {
+      className: "k-sheet-foot"
+    }, /*#__PURE__*/React.createElement("button", {
+      className: "k-btn-secondary k-sheet-done",
+      onClick: () => setEditKey(null)
+    }, "\u5B8C\u4E86"))));
+  })(), /*#__PURE__*/React.createElement("div", {
+    className: "k-toast-region",
+    role: "status",
+    "aria-live": "polite"
+  }, toastMsg && /*#__PURE__*/React.createElement("div", {
+    className: "k-toast"
+  }, toastMsg)), suggestion && /*#__PURE__*/React.createElement("div", {
     className: "k-suggest"
   }, /*#__PURE__*/React.createElement("span", null, "\u6CCA\u306E\u7FCC\u65E5\uFF08", Number(suggestion.key.slice(5, 7)), "\u6708", Number(suggestion.key.slice(8, 10)), "\u65E5\uFF09\u3092\u300C", suggestion.note, "\u300D\u306B\u3057\u307E\u3059\u304B\uFF1F"), /*#__PURE__*/React.createElement("button", {
     className: "k-btn-secondary",
@@ -1759,12 +2100,16 @@ function KintaiApp() {
     onClick: () => setShowLeave(false)
   }, /*#__PURE__*/React.createElement("div", {
     className: "k-modal",
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-label": "\u6709\u7D66\u4F11\u6687",
     onClick: e => e.stopPropagation()
   }, /*#__PURE__*/React.createElement("div", {
     className: "k-modal-head"
   }, /*#__PURE__*/React.createElement("h3", null, "\u6709\u7D66\u4F11\u6687\uFF08", view.y, "\u5E74\uFF09"), /*#__PURE__*/React.createElement("button", {
     className: "k-icon-btn",
-    onClick: () => setShowLeave(false)
+    onClick: () => setShowLeave(false),
+    "aria-label": "\u9589\u3058\u308B"
   }, "\u2715")), /*#__PURE__*/React.createElement("dl", {
     className: "k-stat-list"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("dt", null, "\u4ED8\u4E0E\u65E5\u6570"), /*#__PURE__*/React.createElement("dd", null, settings.paidLeaveTotal, "\u65E5")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("dt", null, "\u53D6\u5F97\u65E5\u6570"), /*#__PURE__*/React.createElement("dd", null, leavesThisYear, "\u65E5")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("dt", {
@@ -1793,19 +2138,24 @@ function KintaiApp() {
     }, seq, "\u56DE\u76EE")), /*#__PURE__*/React.createElement("button", {
       className: "k-mini-btn",
       onClick: () => toggleLeave(k, false),
-      title: "\u6709\u4F11\u3092\u53D6\u6D88"
+      title: "\u6709\u4F11\u3092\u53D6\u6D88",
+      "aria-label": `${m}月${d}日の有休を取り消す`
     }, "\u21BA"));
   })))), showMemo && /*#__PURE__*/React.createElement("div", {
     className: "k-modal-overlay",
     onClick: () => setShowMemo(false)
   }, /*#__PURE__*/React.createElement("div", {
     className: "k-modal",
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-label": "\u30E1\u30E2\u30FB\u4F7F\u7528\u65B9\u6CD5",
     onClick: e => e.stopPropagation()
   }, /*#__PURE__*/React.createElement("div", {
     className: "k-modal-head"
   }, /*#__PURE__*/React.createElement("h3", null, "\u30E1\u30E2\u30FB\u4F7F\u7528\u65B9\u6CD5"), /*#__PURE__*/React.createElement("button", {
     className: "k-icon-btn",
-    onClick: () => setShowMemo(false)
+    onClick: () => setShowMemo(false),
+    "aria-label": "\u9589\u3058\u308B"
   }, "\u2715")), /*#__PURE__*/React.createElement("p", {
     className: "k-memo-hint"
   }, "\u51FA\u52E4\u7C3F\u306E\u4F7F\u3044\u65B9\u3084\u6CE8\u610F\u70B9\u306A\u3069\u3001\u81EA\u7531\u306B\u66F8\u304D\u7559\u3081\u3066\u304A\u3051\u307E\u3059\u3002"), /*#__PURE__*/React.createElement("textarea", {
@@ -1821,6 +2171,9 @@ function KintaiApp() {
     }
   }, /*#__PURE__*/React.createElement("div", {
     className: "k-modal",
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-label": "\u8A2D\u5B9A",
     onClick: e => e.stopPropagation()
   }, /*#__PURE__*/React.createElement("div", {
     className: "k-modal-head"
@@ -1829,7 +2182,8 @@ function KintaiApp() {
     onClick: () => {
       setShowSettings(false);
       setConfirmReset(false);
-    }
+    },
+    "aria-label": "\u9589\u3058\u308B"
   }, "\u2715")), /*#__PURE__*/React.createElement("label", {
     className: "k-field"
   }, "\u6240\u5B9A\u52B4\u50CD\u6642\u9593", /*#__PURE__*/React.createElement("select", {
