@@ -44,7 +44,7 @@
   --font-num: var(--font-sans);
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --paper: #0e1318;
     --surface: #171e25;
     --raised: #1f2830;
@@ -75,6 +75,39 @@
     --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.6);
   }
 }
+/* 表示ボタンでダークに固定したとき */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+    --paper: #0e1318;
+    --surface: #171e25;
+    --raised: #1f2830;
+    --stripe-a: #171e25;
+    --stripe-b: #1c2530;
+    --line: #2f3c47;
+    --ink: #e6edf3;
+    --ink-soft: #9aabb8;
+    --indigo: #7fb0d2;
+    --indigo-deep: #b4d3e8;
+    --on-accent: #0e1a24;
+    --hanko: #e39080;
+    --hanko-deep: #f0aa9c;
+    --bad: #ff8a80;
+    --warn-bg: #3a2f12;
+    --warn-line: #b88a2e;
+    --warn-ink: #f0cf7a;
+    --warn-val: #e0b44a;
+    --over-bg: #3a1f1b;
+    --over-ink: #f0aa9c;
+    --sel: #25405a;
+    --today-bg: #223548;
+    --leave-bg: #3a2723;
+    --disabled-bg: #232c35;
+    --flash: #5a5020;
+    --overlay: rgba(0, 0, 0, 0.6);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+:root[data-theme="light"] { color-scheme: light; }
 
 html, body { margin: 0; padding: 0; background: var(--paper); -webkit-text-size-adjust: 100%; }
 #root { min-height: 100vh; }
@@ -360,16 +393,8 @@ tr.k-leave-row td { background: var(--leave-bg); }
 .k-hero-info { min-width: 0; }
 .k-date { font-size: 15px; font-weight: 600; color: var(--ink-soft); display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .k-hero-note { margin-left: 6px; font-size: 12px; font-weight: 700; padding: 1px 10px; border-radius: 999px; background: var(--sel); color: var(--indigo-deep); }
+.k-hero-times { font-size: 14px; color: var(--ink-soft); margin-bottom: 2px; }
 .k-clock { font-size: 46px; font-weight: 700; color: var(--indigo-deep); line-height: 1.05; margin: 2px 0 4px; }
-.k-punch-row { display: flex; gap: 10px; flex: 1 1 280px; max-width: 420px; margin-left: auto; }
-.k-punch-btn { flex: 1; min-height: 68px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: none; border-radius: var(--r-m); color: var(--on-accent); cursor: pointer; font-family: inherit; box-shadow: var(--shadow-sm); }
-.k-punch-btn:active { transform: translateY(1px); }
-.k-punch-label { font-size: 19px; font-weight: 700; line-height: 1.2; }
-.k-punch-time { font-size: 13px; opacity: 0.9; }
-.k-punch-in { background: var(--indigo); }
-.k-punch-in:hover { background: var(--indigo-deep); }
-.k-punch-out { background: var(--hanko); }
-.k-punch-out:hover { background: var(--hanko-deep); }
 
 /* ===== 段階C：月の概要とカレンダー ===== */
 .k-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
@@ -442,8 +467,6 @@ html.k-noscroll { overflow: hidden; }
   .k-header { margin-bottom: 10px; }
   .k-hero { padding: 14px; margin-bottom: 12px; }
   .k-clock { font-size: 38px; }
-  .k-punch-row { flex: 1 1 100%; max-width: none; margin-left: 0; }
-  .k-punch-btn { min-height: 64px; }
   .k-summary { gap: 6px; }
   .k-sum-tile { padding: 7px 8px; }
   .k-sum-val { font-size: 17px; }
@@ -492,7 +515,7 @@ html.k-noscroll { overflow: hidden; }
 
 /* 印刷：日別の表を中心に、色を白地に揃える */
 @media print {
-  :root { --paper: #fff; --surface: #fff; --raised: #fff; --stripe-a: #fff; --stripe-b: #f3f3f3; --line: #bbb; --ink: #000; --ink-soft: #444; --indigo: #234; --indigo-deep: #000; --today-bg: #fff; --sel: #fff; --leave-bg: #eee; --on-accent: #fff; }
+  :root, :root[data-theme], :root:not([data-theme="light"]) { --paper: #fff; --surface: #fff; --raised: #fff; --stripe-a: #fff; --stripe-b: #f3f3f3; --line: #bbb; --ink: #000; --ink-soft: #444; --indigo: #234; --indigo-deep: #000; --today-bg: #fff; --sel: #fff; --leave-bg: #eee; --on-accent: #fff; }
   .kintai-root { padding: 0; max-width: none; zoom: 1 !important; }
   .k-menu-wrap, .k-hero, .k-bulk-bar, .k-bulk-panel, .k-mini-cal, .k-daylist, .k-back-cal, .k-suggest,
   .k-toast-region, .k-sheet-overlay, .k-modal-overlay, .k-cloud-panel, .k-import-banner,
@@ -510,3 +533,7 @@ html.k-noscroll { overflow: hidden; }
   .k-table td { padding: 3px 6px; }
   .k-summary { break-inside: avoid; }
 }
+
+/* 画面下に固定した「カレンダーに戻る」が、末尾のボタンを隠さないようにする */
+.kintai-root { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+@media (max-width: 640px) { .kintai-root { padding-bottom: calc(80px + env(safe-area-inset-bottom)); } }
