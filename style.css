@@ -551,3 +551,18 @@ tr.k-row-selected td, tr.k-row-selected.k-stripe-a td, tr.k-row-selected.k-strip
 @media (display-mode: standalone) and (max-width: 640px) {
   .kintai-root { padding-top: calc(12px + env(safe-area-inset-top)); }
 }
+
+/* ===== 見送り分：今日のカード・シートの前後移動・ロックボタン ===== */
+.k-hero-open { background: var(--indigo); color: var(--on-accent); border: none; border-radius: var(--r-m); min-height: 44px; padding: 0 18px; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; box-shadow: var(--shadow-sm); }
+.k-hero-open:hover { background: var(--indigo-deep); }
+@media (max-width: 640px) { .k-hero-open { width: 100%; } }
+.k-sheet-head h3 { text-align: center; }
+.k-sheet-head .k-sheet-step { font-size: 24px; flex: none; }
+.k-sheet-done { font-size: 15px; }
+/* PCの表：未ロックの日は鍵アイコンだけ薄く表示し、ホバー・フォーカスで濃くする */
+.k-lock-btn-quiet { border-color: transparent; background: none; opacity: 0.45; }
+.k-lock-btn-quiet:hover, .k-lock-btn-quiet:focus-visible { opacity: 1; border-color: var(--line); }
+@media print { .k-hero-open, .k-sheet-step { display: none !important; } }
+.k-sheet-head h3 { white-space: nowrap; font-size: 19px; }
+.k-sheet-head { gap: 4px; }
+.k-sheet-head .k-lock-btn { margin-left: 0; flex: none; }

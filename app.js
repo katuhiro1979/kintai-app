@@ -924,6 +924,40 @@ function KintaiApp() {
     setTimeout(() => jumpToDate(todayKey), 100);
   };
 
+  // 今日のカードから、今日の入力を開く(スマホは入力シート、PCは表の今日の行へ移動)
+  const openToday = () => {
+    const open = () => {
+      const el = findRow(todayKey);
+      if (el && el.id.startsWith("drow-")) openDialog("sheet:" + todayKey);else jumpToDate(todayKey);
+    };
+    if (view.y !== today.y || view.m !== today.m) {
+      setView({
+        y: today.y,
+        m: today.m
+      });
+      setBulkSel({});
+      setBulkMsg("");
+      setTimeout(open, 100);
+    } else open();
+  };
+
+  // 入力シートで前の日・次の日へ移る(月をまたぐときは表示月も合わせる)
+  const moveSheetDay = delta => {
+    if (!editKey) return;
+    const k = shiftDateKey(editKey, delta);
+    const y = Number(k.slice(0, 4));
+    const m = Number(k.slice(5, 7));
+    if (y !== view.y || m !== view.m) {
+      setView({
+        y,
+        m
+      });
+      setBulkSel({});
+      setBulkMsg("");
+    }
+    setEditKey(k);
+  };
+
   // カレンダー(月の見出し)まで戻る
   const backToCalendar = () => {
     // ミニカレンダーの上端へ移動する。スマホでは月の見出しが上部に固定されるので、その高さ分を引く
@@ -1588,7 +1622,10 @@ function KintaiApp() {
     className: "k-hero-times"
   }, "\u51FA\u52E4 ", todayRec.clockIn || "―", "\u3000\u9000\u52E4 ", todayRec.clockOut || "―"), /*#__PURE__*/React.createElement("div", {
     className: `k-save-status ${saveState === "error" || loadError ? "k-save-status-error" : ""}`
-  }, saveStatusText, cloudOn && cloudUser && cloudStatus ? `　${cloudStatus}` : ""))), cloudOn && showCloud && /*#__PURE__*/React.createElement("div", {
+  }, saveStatusText, cloudOn && cloudUser && cloudStatus ? `　${cloudStatus}` : "")), /*#__PURE__*/React.createElement("button", {
+    className: "k-hero-open",
+    onClick: openToday
+  }, "\u4ECA\u65E5\u3092\u5165\u529B \u203A")), cloudOn && showCloud && /*#__PURE__*/React.createElement("div", {
     className: "k-cloud-panel"
   }, cloudUser ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, "\u30ED\u30B0\u30A4\u30F3\u4E2D: ", cloudUser), /*#__PURE__*/React.createElement("div", {
     className: "k-import-banner-buttons"
@@ -1918,12 +1955,12 @@ function KintaiApp() {
     }, d), /*#__PURE__*/React.createElement("span", {
       className: `k-day-wd ${weekend ? "k-weekend-text" : ""}`
     }, "\uFF08", weekdayLabel(view.y, view.m, d), "\uFF09"), /*#__PURE__*/React.createElement("button", {
-      className: `k-lock-btn ${dayLocked ? "k-lock-btn-locked" : ""}`,
+      className: `k-lock-btn ${dayLocked ? "k-lock-btn-locked" : "k-lock-btn-quiet"}`,
       onClick: () => toggleDayLock(key),
       title: "\u3053\u306E\u65E5\u3092\u30ED\u30C3\u30AF/\u89E3\u9664",
       "aria-pressed": dayLocked,
       "aria-label": `${d}日をロック/解除（現在: ${dayLocked ? "ロック中" : "編集可"}）`
-    }, dayLocked ? "🔒 ロック中" : "編集可")), /*#__PURE__*/React.createElement("td", {
+    }, dayLocked ? "🔒 ロック中" : "🔓")), /*#__PURE__*/React.createElement("td", {
       className: "k-col-note",
       "data-label": "\u696D\u52D9\u5185\u5BB9"
     }, /*#__PURE__*/React.createElement("select", {
@@ -2064,9 +2101,17 @@ function KintaiApp() {
       "aria-hidden": "true"
     }), /*#__PURE__*/React.createElement("div", {
       className: "k-sheet-head"
-    }, /*#__PURE__*/React.createElement("h3", null, sheetM, "\u6708", sheetDay, "\u65E5", /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("button", {
+      className: "k-icon-btn k-sheet-step",
+      onClick: () => moveSheetDay(-1),
+      "aria-label": "\u524D\u306E\u65E5"
+    }, "\u2039"), /*#__PURE__*/React.createElement("h3", null, sheetM, "\u6708", sheetDay, "\u65E5", /*#__PURE__*/React.createElement("span", {
       className: `k-day-wd ${isWeekend(sheetY, sheetM, sheetDay) ? "k-weekend-text" : ""}`
     }, "\uFF08", wd, "\uFF09")), /*#__PURE__*/React.createElement("button", {
+      className: "k-icon-btn k-sheet-step",
+      onClick: () => moveSheetDay(1),
+      "aria-label": "\u6B21\u306E\u65E5"
+    }, "\u203A"), /*#__PURE__*/React.createElement("button", {
       className: `k-lock-btn ${sheetLocked ? "k-lock-btn-locked" : ""}`,
       onClick: () => toggleDayLock(editKey),
       "aria-pressed": sheetLocked
@@ -2153,7 +2198,7 @@ function KintaiApp() {
     }, /*#__PURE__*/React.createElement("button", {
       className: "k-btn-secondary k-sheet-done",
       onClick: () => setEditKey(null)
-    }, "\u5B8C\u4E86"))));
+    }, "\u9589\u3058\u308B\uFF08\u81EA\u52D5\u3067\u4FDD\u5B58\u3055\u308C\u307E\u3059\uFF09"))));
   })(), /*#__PURE__*/React.createElement("div", {
     className: "k-toast-region",
     role: "status",
