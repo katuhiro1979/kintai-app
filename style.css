@@ -11,7 +11,7 @@
   --line: #c7d6e2;
   /* 文字 */
   --ink: #2c3a45;
-  --ink-soft: #5f7280;
+  --ink-soft: #526574;
   /* 主役色と強調色 */
   --indigo: #3f6b8a;
   --indigo-deep: #2c4d66;
@@ -23,7 +23,7 @@
   --warn-bg: #fff6dd;
   --warn-line: #d9a441;
   --warn-ink: #7a5a10;
-  --warn-val: #a67715;
+  --warn-val: #85600a;
   --over-bg: #f9e3df;
   --over-ink: #8a3a2c;
   --sel: #cfe3f1;
@@ -172,7 +172,7 @@ html, body { margin: 0; padding: 0; background: var(--paper); -webkit-text-size-
 tr.k-row-selected td { background: var(--sel); }
 
 /* 「泊」の翌日を「明」にする提案(画面下に固定表示) */
-.k-suggest { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 10px; background: var(--raised); border: 1px solid var(--indigo); border-radius: var(--r-m); padding: 10px 14px; box-shadow: var(--shadow-lg); font-size: 14px; }
+.k-suggest { position: fixed; left: 50%; bottom: calc(72px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 80; display: flex; align-items: center; gap: 10px; background: var(--raised); border: 1px solid var(--indigo); border-radius: var(--r-m); padding: 10px 14px; box-shadow: var(--shadow-lg); font-size: 14px; }
 .k-suggest .k-btn-secondary-outline { flex: none; padding: 8px 12px; font-size: 14px; }
 
 .k-save-status { font-size: 12px; color: var(--ink-soft); margin-top: 6px; min-height: 1.4em; }
@@ -213,7 +213,7 @@ tr.k-row-selected td { background: var(--sel); }
   0%, 100% { background: transparent; }
   30% { background: var(--flash); }
 }
-.k-row-flash td { animation: k-row-flash-anim 1.2s ease; }
+.k-row-flash td, .k-day-row.k-row-flash { animation: k-row-flash-anim 1.2s ease; }
 .k-ledger-head h2 { font-family: var(--font-serif); font-size: 24px; margin: 0; min-width: 170px; text-align: center; color: var(--indigo-deep); }
 .k-today-btn { background: var(--raised); color: var(--indigo-deep); border: 1px solid var(--indigo); border-radius: var(--r-s); height: 28px; padding: 0 10px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .k-back-cal { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 20; background: var(--indigo); color: var(--on-accent); border: none; border-radius: 999px; padding: 10px 16px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; box-shadow: var(--shadow-lg); }
@@ -241,7 +241,7 @@ tr.k-leave-row td { background: var(--leave-bg); }
 .k-note-select:disabled, .k-table input:disabled, .k-remark-input:disabled { background: var(--disabled-bg); color: var(--ink-soft); cursor: not-allowed; }
 .k-col-remark { min-width: 220px; }
 .k-remark-input { width: 100%; font-family: var(--font-sans); font-size: 14px; border: 1px solid var(--line); border-radius: var(--r-s); padding: 3px 6px; background: var(--raised); color: var(--ink); }
-.k-remark-input::placeholder { color: var(--ink-soft); opacity: 0.55; }
+.k-remark-input::placeholder { color: var(--ink-soft); opacity: 0.85; }
 .k-leave-seq-cell { font-size: 14px; color: var(--hanko); font-family: var(--font-num); }
 
 .k-table input[type="time"], .k-table input[type="date"] { font-family: var(--font-num); font-size: 14px; border: 1px solid var(--line); border-radius: var(--r-s); padding: 2px 4px; background: var(--raised); color: var(--ink); width: 90px; }
@@ -325,7 +325,7 @@ tr.k-leave-row td { background: var(--leave-bg); }
   .k-bulk-toggle { font-size: 12px; padding: 4px 10px; }
   .k-bulk-panel { padding: 8px 10px; gap: 8px; }
   .k-bulk-chip, .k-bulk-count, .k-bulk-check, .k-bulk-msg { font-size: 11px; }
-  .k-suggest { width: 92vw; flex-wrap: wrap; font-size: 12px; bottom: 10px; }
+  .k-suggest { width: 92vw; flex-wrap: wrap; font-size: 12px; }
 
   .k-import-banner { flex-direction: column; align-items: flex-start; font-size: 11px; padding: 10px 12px; margin-bottom: 12px; }
   .k-import-banner-buttons { width: 100%; }
@@ -377,7 +377,7 @@ tr.k-leave-row td { background: var(--leave-bg); }
 
 /* 動きを減らす設定の端末では、アニメーションを止める */
 @media (prefers-reduced-motion: reduce) {
-  .k-row-flash td { animation: none; }
+  .k-row-flash td, .k-day-row.k-row-flash { animation: none; }
 }
 
 /* ===== 段階B：ヘッダーと今日の打刻 ===== */
@@ -510,7 +510,7 @@ html.k-noscroll { overflow: hidden; }
   .k-lock-btn { min-height: 36px; padding: 0 12px; font-size: 13px; }
   .k-note-select, .k-bulk-select, .k-field input, .k-field select, .k-memo-textarea, .k-leave-add input { font-size: 16px; }
   .k-bulk-check { min-height: 40px; }
-  .k-suggest { bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .k-suggest { bottom: calc(72px + env(safe-area-inset-bottom)); }
 }
 
 /* 印刷：日別の表を中心に、色を白地に揃える */
@@ -537,3 +537,17 @@ html.k-noscroll { overflow: hidden; }
 /* 画面下に固定した「カレンダーに戻る」が、末尾のボタンを隠さないようにする */
 .kintai-root { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 @media (max-width: 640px) { .kintai-root { padding-bottom: calc(80px + env(safe-area-inset-bottom)); } }
+
+/* ===== 見直し：状態色の優先順位・コントラスト・安全領域 ===== */
+/* 一括入力の選択行は、縞・今日・休暇の背景より優先する */
+tr.k-row-selected td, tr.k-row-selected.k-stripe-a td, tr.k-row-selected.k-stripe-b td, tr.k-row-selected.k-today td, tr.k-row-selected.k-leave-row td { background: var(--sel); }
+/* カレンダー：ホバーしても今日・休暇・選択の見分けを保つ */
+.k-mini-cal-today:hover { background: var(--indigo-deep); border-color: var(--indigo-deep); color: var(--on-accent); }
+.k-mini-cal-leave:hover { background: var(--leave-bg); border-color: var(--hanko-deep); }
+.k-mini-cal-selected:hover { background: var(--sel); border-color: var(--indigo); }
+/* 休暇色の面では、濃い方の赤茶を使って読みやすくする */
+.k-mini-cal-leave, .k-lock-btn-locked, .k-chip-holiday, .k-chip-leave { color: var(--hanko-deep); }
+/* ホーム画面アプリ：スマホ幅でも上の安全領域ぶん余白を確保 */
+@media (display-mode: standalone) and (max-width: 640px) {
+  .kintai-root { padding-top: calc(12px + env(safe-area-inset-top)); }
+}

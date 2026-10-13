@@ -3,7 +3,7 @@
 // 入力データ自体はキャッシュではなく localStorage に保存される(このファイルの役目ではない)。
 
 // ファイルを更新したら、この番号を上げてください。上げないと、古いキャッシュが使われ続けます。
-const CACHE_VERSION = "v10";
+const CACHE_VERSION = "v11";
 const CACHE_NAME = `kintai-shell-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
@@ -54,17 +54,25 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // それ以外の同一オリジンの静的ファイルはキャッシュ優先、無ければネットワークから取得してキャッシュへ追加
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req).then((res) => {
-        if (res && res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-        }
+  // vendor と icons は変わらないのでキャッシュ優先
+  if (/\/(vendor|icons)\//.test(url.pathname)) {
+    event.respondWith(
+      caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+        if (res && res.ok) { const copy = res.clone(); caches.open(CACHE_NAME).then((c) => c.put(req, copy)); }
         return res;
-      });
-    })
+      }))
+    );
+    return;
+  }
+
+  // HTML/CSS/JS はネットワーク優先(index.html と組み合わせがずれないように)。オフライン時だけキャッシュを使う
+  event.respondWith(
+    fetch(req, { cache: "no-cache" }).then((res) => {
+      if (res && res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+      }
+      return res;
+    }).catch(() => caches.match(req))
   );
 });
