@@ -1,5 +1,6 @@
 // このファイルは app.jsx から自動生成されています。直接編集しないでください。
 // 編集する場合は app.jsx を直し、`node build.js` で再生成してください。
+function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 // 出勤簿 アプリ本体(ソース)。
 // ここを編集したら、そのままでは動きません。build.js で app.js にコンパイルしてから使ってください
 // (README.md の「ソースを編集した場合」を参照)。ブラウザでのBabel実行時変換はやめました。
@@ -579,6 +580,7 @@ function KintaiApp() {
     await saveCloudMeta(hashStr(JSON.stringify(next)), remote.updated_at);
     setSettings(next.settings);
     setRecords(next.records);
+    setSuggestion(null);
     setMemo(next.memo);
     setWorkTypeOptions(next.workTypeOptions);
     setAutoFillTimes(next.autoFillTimes);
@@ -901,6 +903,8 @@ function KintaiApp() {
       y,
       m
     });
+    setEditKey(null);
+    setSuggestion(null);
     setBulkSel({}); // 別の月の選択が残らないようにする
     setBulkMsg("");
   };
@@ -912,6 +916,8 @@ function KintaiApp() {
         y: today.y,
         m: today.m
       });
+      setEditKey(null);
+      setSuggestion(null);
       setBulkSel({});
       setBulkMsg("");
     }
@@ -966,12 +972,62 @@ function KintaiApp() {
     clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToastMsg(""), 2600);
   };
-  const sheetRef = useRef(null);
   const lastFocusRef = useRef(null);
+  const overlayDownRef = useRef(false);
   const anyDialog = showMenu || !!editKey || showLeave || showMemo || showSettings;
+  // 開いているダイアログの種類(メニュー以外)。切り替わるたびにフォーカスを移す
+  const dialogId = editKey ? "sheet" : showLeave ? "leave" : showMemo ? "memo" : showSettings ? "settings" : "";
+  // ダイアログを開く前に、ほかのダイアログを閉じる(同時に開かない)
+  const closeDialogs = () => {
+    setShowMenu(false);
+    setEditKey(null);
+    setShowLeave(false);
+    setShowMemo(false);
+    setShowSettings(false);
+    setConfirmReset(false);
+  };
+  const openDialog = kind => {
+    closeDialogs();
+    if (kind === "leave") setShowLeave(true);else if (kind === "memo") setShowMemo(true);else if (kind === "settings") setShowSettings(true);else setEditKey(kind.slice(6)); // "sheet:YYYY-MM-DD"
+  };
+  // 背景(オーバーレイ)を「押して離した」ときだけ閉じる。文字選択のドラッグで閉じないようにする
+  const overlayProps = close => ({
+    onMouseDown: e => {
+      overlayDownRef.current = e.target === e.currentTarget;
+    },
+    onClick: e => {
+      if (e.target === e.currentTarget && overlayDownRef.current) close();
+      overlayDownRef.current = false;
+    }
+  });
   useEffect(() => {
     if (!anyDialog) return;
+    const dialogEl = () => document.querySelector(".k-modal-overlay [role='dialog']");
     const onKey = e => {
+      if (e.isComposing || e.keyCode === 229) return; // IME変換中のキーは無視
+      if (e.key === "Tab") {
+        const box = dialogEl();
+        if (!box) return;
+        const items = Array.from(box.querySelectorAll("button, input, select, textarea, [tabindex]:not([tabindex='-1'])")).filter(el => !el.disabled && el.getClientRects().length);
+        if (!items.length) {
+          e.preventDefault();
+          box.focus();
+          return;
+        }
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (!box.contains(document.activeElement)) {
+          e.preventDefault();
+          first.focus();
+        } else if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+        return;
+      }
       if (e.key !== "Escape") return;
       if (editKey) setEditKey(null);else if (showLeave) setShowLeave(false);else if (showMemo) setShowMemo(false);else if (showSettings) {
         setShowSettings(false);
@@ -981,16 +1037,20 @@ function KintaiApp() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [anyDialog, editKey, showLeave, showMemo, showSettings, showMenu]);
-  // 入力シートを開いたらシートへフォーカスを移し、閉じたら元のボタンへ戻す
+  // ダイアログを開いたら中へフォーカスを移し、閉じたら元のボタンへ戻す
   useEffect(() => {
-    if (!editKey) return;
+    if (!dialogId) return;
     lastFocusRef.current = document.activeElement;
-    if (sheetRef.current) sheetRef.current.focus();
+    const box = document.querySelector(".k-modal-overlay [role='dialog']");
+    if (box) {
+      box.setAttribute("tabindex", "-1");
+      box.focus();
+    }
     return () => {
       const el = lastFocusRef.current;
       if (el && el.focus && document.contains(el)) el.focus();
     };
-  }, [editKey]);
+  }, [dialogId]);
   // シートを開いている間は、後ろの画面をスクロールさせない
   useEffect(() => {
     document.documentElement.classList.toggle("k-noscroll", !!editKey);
@@ -1177,12 +1237,20 @@ function KintaiApp() {
   };
   const acceptSuggestion = () => {
     if (!suggestion) return;
+    const target = records[suggestion.key] || {};
+    if (target.locked || target.note) {
+      setSuggestion(null);
+      showToast("翌日はすでに入力済み（またはロック中）のため、変更しませんでした");
+      return;
+    }
     onNoteChange(suggestion.key, suggestion.note);
     setSuggestion(null);
   };
   const resetAllData = () => {
     backupNow("リセット前");
     setRecords({});
+    setEditKey(null);
+    setSuggestion(null);
     setConfirmReset(false);
   };
   const handleExport = async () => {
@@ -1234,6 +1302,8 @@ function KintaiApp() {
       ...(parsed.settings || {})
     });
     setRecords(parsed.records || {});
+    setEditKey(null);
+    setSuggestion(null);
     setMemo(parsed.memo || "");
     if (parsed.workTypeOptions) setWorkTypeOptions(parsed.workTypeOptions);
     if (parsed.autoFillTimes) setAutoFillTimes(parsed.autoFillTimes);
@@ -1775,7 +1845,7 @@ function KintaiApp() {
     }, /*#__PURE__*/React.createElement("button", {
       id: `drow-${key}`,
       className: cls,
-      onClick: () => bulkMode ? toggleSelect(key) : setEditKey(key),
+      onClick: () => bulkMode ? toggleSelect(key) : openDialog("sheet:" + key),
       "aria-label": `${d}日（${weekdayLabel(view.y, view.m, d)}）${rec.note || ""} ${timeText} を${bulkMode ? "選択" : "編集"}`
     }, bulkMode && /*#__PURE__*/React.createElement("span", {
       className: `k-day-check ${bulkSel[key] ? "k-day-check-on" : ""}`,
@@ -1964,13 +2034,13 @@ function KintaiApp() {
     className: "k-bottom-buttons"
   }, /*#__PURE__*/React.createElement("button", {
     className: "k-btn-secondary",
-    onClick: () => setShowLeave(true)
+    onClick: () => openDialog("leave")
   }, "\uD83D\uDDD3 \u6709\u7D66\u4F11\u6687"), /*#__PURE__*/React.createElement("button", {
     className: "k-btn-secondary",
-    onClick: () => setShowMemo(true)
+    onClick: () => openDialog("memo")
   }, "\uD83D\uDCDD \u30E1\u30E2"), /*#__PURE__*/React.createElement("button", {
     className: "k-settings-toggle",
-    onClick: () => setShowSettings(true)
+    onClick: () => openDialog("settings")
   }, "\u2699 \u8A2D\u5B9A"))), editKey && sheetRec && (() => {
     const sheetLocked = !!sheetRec.locked;
     const {
@@ -1978,25 +2048,24 @@ function KintaiApp() {
       otMinutes: sOt,
       workText: sWork
     } = calcDay(sheetRec);
-    const wd = weekdayLabel(view.y, view.m, sheetDay);
-    return /*#__PURE__*/React.createElement("div", {
-      className: "k-modal-overlay k-sheet-overlay",
-      onClick: () => setEditKey(null)
-    }, /*#__PURE__*/React.createElement("div", {
+    const sheetY = Number(editKey.slice(0, 4));
+    const sheetM = Number(editKey.slice(5, 7));
+    const wd = weekdayLabel(sheetY, sheetM, sheetDay);
+    return /*#__PURE__*/React.createElement("div", _extends({
+      className: "k-modal-overlay k-sheet-overlay"
+    }, overlayProps(() => setEditKey(null))), /*#__PURE__*/React.createElement("div", {
       className: "k-sheet",
-      ref: sheetRef,
-      tabIndex: -1,
       role: "dialog",
       "aria-modal": "true",
-      "aria-label": `${view.m}月${sheetDay}日の入力`,
+      "aria-label": `${sheetM}月${sheetDay}日の入力`,
       onClick: e => e.stopPropagation()
     }, /*#__PURE__*/React.createElement("div", {
       className: "k-sheet-grab",
       "aria-hidden": "true"
     }), /*#__PURE__*/React.createElement("div", {
       className: "k-sheet-head"
-    }, /*#__PURE__*/React.createElement("h3", null, view.m, "\u6708", sheetDay, "\u65E5", /*#__PURE__*/React.createElement("span", {
-      className: `k-day-wd ${isWeekend(view.y, view.m, sheetDay) ? "k-weekend-text" : ""}`
+    }, /*#__PURE__*/React.createElement("h3", null, sheetM, "\u6708", sheetDay, "\u65E5", /*#__PURE__*/React.createElement("span", {
+      className: `k-day-wd ${isWeekend(sheetY, sheetM, sheetDay) ? "k-weekend-text" : ""}`
     }, "\uFF08", wd, "\uFF09")), /*#__PURE__*/React.createElement("button", {
       className: `k-lock-btn ${sheetLocked ? "k-lock-btn-locked" : ""}`,
       onClick: () => toggleDayLock(editKey),
@@ -2099,10 +2168,9 @@ function KintaiApp() {
   }, "\u5165\u529B\u3059\u308B"), /*#__PURE__*/React.createElement("button", {
     className: "k-btn-secondary-outline",
     onClick: () => setSuggestion(null)
-  }, "\u9589\u3058\u308B")), showLeave && /*#__PURE__*/React.createElement("div", {
-    className: "k-modal-overlay",
-    onClick: () => setShowLeave(false)
-  }, /*#__PURE__*/React.createElement("div", {
+  }, "\u9589\u3058\u308B")), showLeave && /*#__PURE__*/React.createElement("div", _extends({
+    className: "k-modal-overlay"
+  }, overlayProps(() => setShowLeave(false))), /*#__PURE__*/React.createElement("div", {
     className: "k-modal",
     role: "dialog",
     "aria-modal": "true",
@@ -2145,10 +2213,9 @@ function KintaiApp() {
       title: "\u6709\u4F11\u3092\u53D6\u6D88",
       "aria-label": `${m}月${d}日の有休を取り消す`
     }, "\u21BA"));
-  })))), showMemo && /*#__PURE__*/React.createElement("div", {
-    className: "k-modal-overlay",
-    onClick: () => setShowMemo(false)
-  }, /*#__PURE__*/React.createElement("div", {
+  })))), showMemo && /*#__PURE__*/React.createElement("div", _extends({
+    className: "k-modal-overlay"
+  }, overlayProps(() => setShowMemo(false))), /*#__PURE__*/React.createElement("div", {
     className: "k-modal",
     role: "dialog",
     "aria-modal": "true",
@@ -2167,13 +2234,12 @@ function KintaiApp() {
     value: memo,
     onChange: e => setMemo(e.target.value),
     placeholder: "\u3053\u3053\u306B\u30E1\u30E2\u3092\u5165\u529B\u2026"
-  }))), showSettings && /*#__PURE__*/React.createElement("div", {
-    className: "k-modal-overlay",
-    onClick: () => {
-      setShowSettings(false);
-      setConfirmReset(false);
-    }
-  }, /*#__PURE__*/React.createElement("div", {
+  }))), showSettings && /*#__PURE__*/React.createElement("div", _extends({
+    className: "k-modal-overlay"
+  }, overlayProps(() => {
+    setShowSettings(false);
+    setConfirmReset(false);
+  })), /*#__PURE__*/React.createElement("div", {
     className: "k-modal",
     role: "dialog",
     "aria-modal": "true",

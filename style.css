@@ -515,7 +515,7 @@ html.k-noscroll { overflow: hidden; }
 
 /* 印刷：日別の表を中心に、色を白地に揃える */
 @media print {
-  :root, :root[data-theme], :root:not([data-theme="light"]) { --paper: #fff; --surface: #fff; --raised: #fff; --stripe-a: #fff; --stripe-b: #f3f3f3; --line: #bbb; --ink: #000; --ink-soft: #444; --indigo: #234; --indigo-deep: #000; --today-bg: #fff; --sel: #fff; --leave-bg: #eee; --on-accent: #fff; }
+  :root, :root[data-theme], :root:not([data-theme="light"]) { --paper: #fff; --surface: #fff; --raised: #fff; --stripe-a: #fff; --stripe-b: #f3f3f3; --line: #bbb; --ink: #000; --ink-soft: #444; --indigo: #234; --indigo-deep: #000; --today-bg: #fff; --sel: #fff; --leave-bg: #eee; --on-accent: #fff; --hanko: #7a2a1a; --hanko-deep: #5c1f13; --bad: #8a1a12; --warn-bg: #fff; --warn-line: #888; --warn-ink: #000; --warn-val: #4a3500; --over-bg: #eee; --over-ink: #000; --disabled-bg: #fff; --flash: #fff; --shadow-sm: none; --shadow-lg: none; }
   .kintai-root { padding: 0; max-width: none; zoom: 1 !important; }
   .k-menu-wrap, .k-hero, .k-bulk-bar, .k-bulk-panel, .k-mini-cal, .k-daylist, .k-back-cal, .k-suggest,
   .k-toast-region, .k-sheet-overlay, .k-modal-overlay, .k-cloud-panel, .k-import-banner,
